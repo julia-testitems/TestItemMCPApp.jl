@@ -11,6 +11,7 @@ mutable struct AppState
     subscriptions::Set{String}
     log_level::Symbol  # MCP log level: :debug, :info, :notice, :warning, :error, :critical, :alert, :emergency
     cancellation_sources::Dict{String,CancellationTokens.CancellationTokenSource}  # testrun_id → cts
+    test_env_by_id::Dict{String,TestItemControllers.TestEnvironment}
     lock::ReentrantLock
 end
 
@@ -26,6 +27,7 @@ function AppState(endpoint::JSONRPC.JSONRPCEndpoint)
         Set{String}(),
         :info,
         Dict{String,CancellationTokens.CancellationTokenSource}(),
+        Dict{String,TestItemControllers.TestEnvironment}(),
         ReentrantLock(),
     )
 end

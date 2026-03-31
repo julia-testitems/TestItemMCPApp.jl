@@ -57,29 +57,29 @@ end
 
 function testmessage_to_dict(msg)
     d = Dict{String,Any}("message" => msg.message)
-    if !ismissing(msg.expectedOutput)
-        d["expectedOutput"] = msg.expectedOutput
+    if msg.expected_output !== nothing
+        d["expected_output"] = msg.expected_output
     end
-    if !ismissing(msg.actualOutput)
-        d["actualOutput"] = msg.actualOutput
+    if msg.actual_output !== nothing
+        d["actual_output"] = msg.actual_output
     end
-    if !ismissing(msg.uri)
+    if msg.uri !== nothing
         d["uri"] = msg.uri
     end
-    if !ismissing(msg.line)
+    if msg.line !== nothing
         d["line"] = msg.line
     end
-    if !ismissing(msg.column)
+    if msg.column !== nothing
         d["column"] = msg.column
     end
-    if !ismissing(msg.stackTrace)
-        d["stackTrace"] = [
+    if msg.stack_trace !== nothing
+        d["stack_trace"] = [
             Dict{String,Any}(
                 "label" => f.label,
-                "uri" => ismissing(f.uri) ? nothing : f.uri,
-                "line" => ismissing(f.line) ? nothing : f.line,
-                "column" => ismissing(f.column) ? nothing : f.column,
-            ) for f in msg.stackTrace
+                "uri" => f.uri,
+                "line" => f.line,
+                "column" => f.column,
+            ) for f in msg.stack_trace
         ]
     end
     return d

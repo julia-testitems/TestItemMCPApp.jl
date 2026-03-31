@@ -93,14 +93,28 @@ function tool_run_testitems(state::AppState, args::Dict{String,Any})
     init_controller!(state)
 
     filter = build_filter(args)
-    items, setups = resolve_testitems(state; filter=filter)
+    items, setups, item_package_info = resolve_testitems(state; filter=filter)
 
     if isempty(items)
         return tool_result_text("No test items matched the given filter.")
     end
 
-    profile = build_profile(args)
-    testrun_id = profile.id
+    test_envs, env_id_for_item, max_processes, coverage_root_uris, log_level = build_test_environments(args, item_package_info)
+    testrun_id = test_envs[1].id
+
+    # Register test environments for on_process_created callback
+    lock(state.lock) do
+        for env in test_envs
+            state.test_env_by_id[env.id] = env
+        end
+    end
+
+    # Build work units mapping each item to its matching test environment
+    timeout = filter !== nothing ? get(filter, :timeout, nothing) : nothing
+    work_units = [
+        TestItemControllers.TestRunItem(item.id, env_id_for_item[item.id], timeout, log_level)
+        for item in items
+    ]
 
     # Create cancellation source
     cts = CancellationTokens.CancellationTokenSource()
@@ -132,10 +146,13 @@ function tool_run_testitems(state::AppState, args::Dict{String,Any})
         TestItemControllers.execute_testrun(
             state.controller,
             testrun_id,
-            [profile],
+            test_envs,
             items,
+            work_units,
             setups,
-            cts.token,
+            max_processes,
+            cts.token;
+            coverage_root_uris=coverage_root_uris,
         )
     catch e
         lock(state.lock) do
@@ -153,7 +170,7 @@ function tool_run_testitems(state::AppState, args::Dict{String,Any})
     lock(state.lock) do
         run_record.status = :completed
         run_record.completed_at = Dates.now()
-        if coverage_results !== nothing && coverage_results !== missing
+        if coverage_results !== nothing
             run_record.coverage = coverage_to_dicts(coverage_results)
         end
     end

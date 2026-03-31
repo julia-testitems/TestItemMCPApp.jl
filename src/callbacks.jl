@@ -2,7 +2,7 @@
 
 function create_controller_callbacks(state::AppState)
     return TestItemControllers.ControllerCallbacks(
-        on_testitem_started = (testrun_id, testitem_id) -> begin
+        on_testitem_started = (testrun_id, testitem_id, test_env_id) -> begin
             lock(state.lock) do
                 run = get(state.runs, testrun_id, nothing)
                 run === nothing && return
@@ -14,7 +14,7 @@ function create_controller_callbacks(state::AppState)
             notify_resource_updated(state, "testrun://$testrun_id/summary")
         end,
 
-        on_testitem_passed = (testrun_id, testitem_id, duration) -> begin
+        on_testitem_passed = (testrun_id, testitem_id, test_env_id, duration) -> begin
             lock(state.lock) do
                 run = get(state.runs, testrun_id, nothing)
                 run === nothing && return
@@ -28,7 +28,7 @@ function create_controller_callbacks(state::AppState)
             notify_resource_updated(state, "testrun://$testrun_id/failures")
         end,
 
-        on_testitem_failed = (testrun_id, testitem_id, messages, duration) -> begin
+        on_testitem_failed = (testrun_id, testitem_id, test_env_id, messages, duration) -> begin
             lock(state.lock) do
                 run = get(state.runs, testrun_id, nothing)
                 run === nothing && return
@@ -40,12 +40,13 @@ function create_controller_callbacks(state::AppState)
             end
             label = get_item_label(state, testrun_id, testitem_id)
             msg_summary = isempty(messages) ? "" : ": $(first(messages).message)"
-            mcp_warn(state, "testitem", "Failed: $label ($(round(duration, digits=2))s)$msg_summary")
+            dur_str = duration !== nothing ? " ($(round(duration, digits=2))s)" : ""
+            mcp_warn(state, "testitem", "Failed: $label$dur_str$msg_summary")
             notify_resource_updated(state, "testrun://$testrun_id/summary")
             notify_resource_updated(state, "testrun://$testrun_id/failures")
         end,
 
-        on_testitem_errored = (testrun_id, testitem_id, messages, duration) -> begin
+        on_testitem_errored = (testrun_id, testitem_id, test_env_id, messages, duration) -> begin
             lock(state.lock) do
                 run = get(state.runs, testrun_id, nothing)
                 run === nothing && return
@@ -57,12 +58,13 @@ function create_controller_callbacks(state::AppState)
             end
             label = get_item_label(state, testrun_id, testitem_id)
             msg_summary = isempty(messages) ? "" : ": $(first(messages).message)"
-            mcp_error(state, "testitem", "Errored: $label ($(round(duration, digits=2))s)$msg_summary")
+            dur_str = duration !== nothing ? " ($(round(duration, digits=2))s)" : ""
+            mcp_error(state, "testitem", "Errored: $label$dur_str$msg_summary")
             notify_resource_updated(state, "testrun://$testrun_id/summary")
             notify_resource_updated(state, "testrun://$testrun_id/failures")
         end,
 
-        on_testitem_skipped = (testrun_id, testitem_id) -> begin
+        on_testitem_skipped = (testrun_id, testitem_id, test_env_id) -> begin
             lock(state.lock) do
                 run = get(state.runs, testrun_id, nothing)
                 run === nothing && return
@@ -74,7 +76,7 @@ function create_controller_callbacks(state::AppState)
             notify_resource_updated(state, "testrun://$testrun_id/summary")
         end,
 
-        on_append_output = (testrun_id, testitem_id, output) -> begin
+        on_append_output = (testrun_id, testitem_id, test_env_id, output) -> begin
             lock(state.lock) do
                 run = get(state.runs, testrun_id, nothing)
                 run === nothing && return
@@ -89,7 +91,13 @@ function create_controller_callbacks(state::AppState)
             # Debugging is excluded from MCP server
         end,
 
-        on_process_created = (id, package_name, package_uri, project_uri, coverage, env) -> begin
+        on_process_created = (id, test_env_id) -> begin
+            env = lock(state.lock) do
+                get(state.test_env_by_id, test_env_id, nothing)
+            end
+            package_name = env !== nothing ? env.package_name : ""
+            package_uri = env !== nothing ? env.package_uri : ""
+            project_uri = env !== nothing ? something(env.project_uri, "") : ""
             lock(state.lock) do
                 state.processes[id] = ProcessInfo(id, package_name, "Created", package_uri, project_uri)
                 state.process_outputs[id] = String[]
